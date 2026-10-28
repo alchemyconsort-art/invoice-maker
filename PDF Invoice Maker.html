@@ -1,0 +1,589 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>PDF Invoice Maker</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Schibsted+Grotesk:wght@400;500;600;700&family=Dancing+Script:wght@600&display=swap">
+<style>
+/* Layout: working form on the left, live paper preview pinned on the right; stacks to one column on phones. */
+:root {
+  --bg: #edf0ee;
+  --surface: #f7f9f8;
+  --fg: #17231f;
+  --muted: #5b6b66;
+  --line: #cfd8d4;
+  --field: #ffffff;
+  --accent: #0e6a5e;
+  --accent-fg: #ffffff;
+  --danger: #b3261e;
+  /* the preview sheet stands for the printed page, so it keeps paper colours in both themes */
+  --sheet: #ffffff;
+  --sheet-ink: #17231f;
+  --sheet-muted: #66736f;
+  --sheet-line: #d9dfdc;
+  --sheet-accent: #0e6a5e;
+  --font-body: "Schibsted Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1513; --surface: #161d1a; --fg: #e4ece8; --muted: #8fa19a; --line: #2b3732;
+    --field: #1b2420; --accent: #4fc3b0; --accent-fg: #06201b; --danger: #ff8a80;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1513; --surface: #161d1a; --fg: #e4ece8; --muted: #8fa19a; --line: #2b3732;
+  --field: #1b2420; --accent: #4fc3b0; --accent-fg: #06201b; --danger: #ff8a80;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.45;
+  padding-block: 24px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 1240px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px; }
+.top { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px 24px; }
+h1 { margin: 0; font-size: 1.7rem; font-weight: 700; letter-spacing: -0.02em; text-wrap: balance; }
+.sub { margin: 4px 0 0; color: var(--muted); max-width: 60ch; }
+.grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 32px; align-items: start; }
+@media (min-width: 960px) { .grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .preview-col { position: sticky; top: 16px; } }
+
+button { font: inherit; cursor: pointer; }
+.btn { background: var(--accent); color: var(--accent-fg); border: 0; border-radius: 6px; padding: 10px 18px; font-weight: 600; }
+.btn:hover { filter: brightness(1.08); }
+.btn-ghost { background: transparent; color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 7px 12px; font-size: 13px; }
+.btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.notice { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; justify-content: space-between; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 10px 14px; font-size: 13px; color: var(--muted); }
+
+form { display: flex; flex-direction: column; }
+section { border-top: 1px solid var(--line); padding-block: 20px; display: flex; flex-direction: column; gap: 14px; }
+section:first-of-type { border-top: 0; padding-top: 0; }
+h2 { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); }
+.row { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+.field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+label, .lbl { font-size: 13px; color: var(--muted); }
+input, select, textarea {
+  font: inherit; color: var(--fg); background: var(--field);
+  border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; width: 100%; min-width: 0;
+}
+textarea { resize: vertical; min-height: 70px; }
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 0; border-color: var(--accent); }
+.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.hint { font-size: 12px; color: var(--muted); }
+.fixed { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 10px 14px; font-size: 14px; overflow-wrap: anywhere; }
+
+
+.items-head, .item { display: grid; grid-template-columns: minmax(0, 1fr) 120px 34px; gap: 8px; align-items: center; }
+.items-head { font-size: 12px; color: var(--muted); padding-inline: 2px; }
+.items-head span:nth-child(2) { text-align: right; }
+.item input.num { text-align: right; }
+.amt { position: relative; display: block; min-width: 0; }
+.amt::before { content: "$"; position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+.amt input { padding-left: 24px; }
+.items { display: flex; flex-direction: column; gap: 8px; }
+.x { width: 34px; height: 34px; border: 1px solid var(--line); background: transparent; color: var(--muted); border-radius: 6px; font-size: 18px; line-height: 1; padding: 0; }
+.x:hover { color: var(--danger); border-color: var(--danger); }
+.check { display: flex; align-items: center; gap: 8px; }
+.check input { width: auto; }
+.check label { color: var(--fg); }
+
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding-top: 20px; border-top: 1px solid var(--line); }
+.status { font-size: 13px; color: var(--muted); min-height: 1.4em; }
+.status.err { color: var(--danger); }
+
+/* preview sheet */
+.sheet-label { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+.sheet {
+  background: var(--sheet); color: var(--sheet-ink);
+  border: 1px solid var(--line); border-radius: 3px;
+  padding: clamp(18px, 4vw, 40px); font-size: 12.5px; line-height: 1.45;
+  box-shadow: 0 1px 0 rgba(0,0,0,0.04), 0 10px 30px -18px rgba(0,0,0,0.35);
+  overflow-wrap: anywhere;
+}
+.sheet h3 { margin: 0; font-size: 1.9rem; letter-spacing: 0.02em; text-transform: uppercase; font-weight: 700; color: var(--sheet-accent); }
+.sh-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; border-bottom: 2px solid var(--sheet-accent); padding-bottom: 12px; }
+.sh-top img { max-height: 44px; max-width: 140px; }
+.sh-cols { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 18px 24px; margin-top: 18px; }
+.sh-cols > div { min-width: 0; flex: 1 1 160px; }
+.sh-k { font-size: 10.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--sheet-muted); margin-bottom: 3px; }
+.pre { white-space: pre-line; }
+.meta { display: grid; grid-template-columns: auto auto; gap: 2px 14px; justify-content: end; margin: 0; }
+.meta dt { color: var(--sheet-muted); }
+.meta dd { margin: 0; text-align: right; font-family: var(--font-mono); }
+.tbl-wrap { overflow-x: auto; margin-top: 20px; }
+.sheet table { width: 100%; border-collapse: collapse; }
+.sheet th { text-align: right; font-size: 10.5px; letter-spacing: 0.09em; text-transform: uppercase; font-weight: 500; color: var(--sheet-muted); border-bottom: 1px solid var(--sheet-ink); padding: 6px 6px; }
+.sheet th:first-child, .sheet td:first-child { text-align: left; padding-left: 0; }
+.sheet th:last-child, .sheet td:last-child { padding-right: 0; }
+.sheet td { padding: 7px 6px; border-bottom: 1px solid var(--sheet-line); text-align: right; vertical-align: top; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.sheet td:first-child { font-family: var(--font-body); }
+.sh-empty { color: var(--sheet-muted); padding: 14px 0; font-family: var(--font-body); text-align: left !important; }
+.total { margin: 12px 0 0 auto; width: min(260px, 100%); display: flex; justify-content: space-between; gap: 14px; border-top: 1px solid var(--sheet-ink); padding-top: 6px; font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-weight: 500; font-size: 14px; color: var(--sheet-accent); }
+.sh-pay { margin-top: 22px; }
+.pay { display: grid; grid-template-columns: auto 1fr; gap: 2px 14px; justify-content: start; margin: 0; }
+.pay dt { color: var(--sheet-muted); }
+.pay dd { margin: 0; font-family: var(--font-mono); }
+.stmt-block { margin-top: 18px; }
+.stmt-block .sig { font-family: "Dancing Script", "Brush Script MT", "Segoe Script", cursive; font-weight: 600; font-size: 1.7rem; line-height: 1.3; min-height: 1.3em; }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>PDF Invoice Maker</h1>
+      <p class="sub">Fill in the form, check the preview, then download a finished PDF. Nothing is uploaded; the file is built in your browser.</p>
+    </div>
+    <button type="button" class="btn dl">Download PDF</button>
+  </header>
+
+  <div class="notice" id="example-note">
+    <span id="noteText">Example details are loaded so you can see how it looks.</span>
+    <button type="button" class="btn-ghost" id="clear">Clear and start your own</button>
+  </div>
+
+  <div class="grid">
+    <form id="form" autocomplete="off" novalidate>
+      <section>
+        <h2>Your details</h2>
+        <div class="field"><label for="fromName">Your name</label><input id="fromName" type="text"></div>
+        <div class="field" id="abnField"><label for="fromAbn">Your ABN</label><input id="fromAbn" type="text" class="num" inputmode="numeric"></div>
+        <div class="check"><input id="noAbn" type="checkbox"><label for="noAbn">I don't have an ABN (adds "statement by a supplier" to invoice)</label></div>
+        <div class="field"><label for="fromAddr">Address</label><textarea id="fromAddr" rows="2"></textarea></div>
+        <div class="field"><label for="fromEmail">Email or phone</label><input id="fromEmail" type="text"></div>
+      </section>
+
+      <section>
+        <h2>Billed to</h2>
+        <div class="field"><label for="toText">Name, ABN, address and email</label><textarea id="toText" rows="4"></textarea></div>
+      </section>
+
+      <section>
+        <h2>Invoice details</h2>
+        <div class="row">
+          <div class="field"><label for="invNo">Invoice number</label><input id="invNo" type="text" class="num"></div>
+          <div class="field"><label for="issue">Date</label><input id="issue" type="date" class="num"></div>        </div>
+      </section>
+
+      <section>
+        <h2>Line items</h2>
+        <div class="items-head" aria-hidden="true"><span>Description</span><span>Amount</span><span></span></div>
+        <div class="items" id="items"></div>
+        <div><button type="button" class="btn-ghost" id="addItem">Add line</button></div>
+      </section>
+
+      <section>
+        <h2>Payment details</h2>
+        <div class="field"><label for="acctName">Account name</label><input id="acctName" type="text"></div>
+        <div class="row">
+          <div class="field"><label for="bsb">BSB</label><input id="bsb" type="text" class="num" inputmode="numeric" maxlength="7" placeholder="000-000"></div>
+          <div class="field"><label for="acctNo">Account number</label><input id="acctNo" type="text" class="num" inputmode="numeric" maxlength="10" placeholder="00000000"></div>
+        </div>
+      </section>
+
+      <div class="actions">
+        <button type="button" class="btn dl">Download PDF</button>
+        <button type="button" class="btn-ghost" id="forget">Forget saved details</button>
+        <span class="status" id="status" role="status" aria-live="polite"></span>
+      </div>
+    </form>
+
+    <div class="preview-col">
+      <div class="sheet-label"><h2>Preview</h2><span class="hint">A4, as it will print</span></div>
+      <div class="sheet" id="sheet"></div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var itemSeq = 0;
+
+  // Starting values for "Billed to". The Clear button leaves these alone.
+  var BILLED_DEFAULT = {
+    toText: 'Alchemy Consort Inc.\nABN 38 524 921 144\n46 Walker Street, Northcote\nalchemyconsort@gmail.com'
+  };
+  function statementText(d) {
+    var addr = d.fromAddr.replace(/\s*\n\s*/g, ', ');
+    return (d.fromName || '[your name]') + ' of ' + (addr || '[your address]') +
+      ' is not quoting an ABN since the supply is made in the course or furtherance of an activity done as a private recreational pursuit or hobby.';
+  }
+
+  // The downloads capability exists only inside the claude.ai viewer; elsewhere we fall back to a normal download.
+  var dlCap = null;
+  var dlReady = (window.claude && window.claude.use)
+    ? window.claude.use('downloads').then(function (c) { dlCap = c; }).catch(function () {})
+    : Promise.resolve();
+
+  function round2(n) { return Math.round(n * 100) / 100; }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function isoDate(d) {
+    var m = String(d.getMonth() + 1).padStart(2, '0'), day = String(d.getDate()).padStart(2, '0');
+    return d.getFullYear() + '-' + m + '-' + day;
+  }
+  function fmtDate(iso) {
+    if (!iso) return '';
+    var d = new Date(iso + 'T00:00:00');
+    if (isNaN(d)) return '';
+    return d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+  function money(n, cur) {
+    try {
+      return new Intl.NumberFormat('en-AU', { style: 'currency', currency: cur, currencyDisplay: 'symbol' })
+        .format(n).replace(/ /g, ' ');
+    } catch (e) { return '$' + n.toFixed(2); }
+  }
+  function qtyStr(q) { return String(Math.round(q * 1000) / 1000); }
+  /* ---------- remember details in this browser ---------- */
+  var STORE_KEY = 'invoiceMaker.v1';
+  var FIELDS = ['fromName', 'fromAbn', 'fromAddr', 'fromEmail', 'toText', 'invNo', 'issue', 'acctName', 'bsb', 'acctNo'];
+  var saving = false;   // stays false until the person changes something, so loading never overwrites what is saved
+  function persist() {
+    try {
+      var o = { noAbn: $('noAbn').checked };
+      FIELDS.forEach(function (k) { o[k] = $(k).value; });
+      o.items = Array.prototype.map.call(document.querySelectorAll('.item'), function (r) {
+        return { d: r.querySelector('.i-desc').value, a: r.querySelector('.i-amount').value };
+      });
+      localStorage.setItem(STORE_KEY, JSON.stringify(o));
+    } catch (e) { /* storage blocked or full: the page still works without it */ }
+  }
+  function restore() {
+    try {
+      var raw = localStorage.getItem(STORE_KEY);
+      if (!raw) return false;
+      var o = JSON.parse(raw);
+      if (!o || typeof o !== 'object') return false;
+      FIELDS.forEach(function (k) { if (typeof o[k] === 'string') $(k).value = o[k]; });
+      $('noAbn').checked = !!o.noAbn;
+      $('items').innerHTML = '';
+      var list = Array.isArray(o.items) && o.items.length ? o.items : [{ d: '', a: '' }];
+      list.forEach(function (it) { addItem(String(it.d || ''), String(it.a || '')); });
+      $('noteText').textContent = 'Your saved details were loaded from this browser.';
+      $('example-note').hidden = false;
+      render();
+      return true;
+    } catch (e) { return false; }
+  }
+  function touch() { saving = true; render(); }
+
+  function abnText(v) { return v ? (/^abn\b/i.test(v) ? v : 'ABN ' + v) : ''; }
+
+  /* ---------- line items ---------- */
+  function addItem(desc, amount) {
+    var n = ++itemSeq;
+    var row = document.createElement('div');
+    row.className = 'item';
+    row.innerHTML =
+      '<input id="it' + n + 'd" class="i-desc" type="text" placeholder="Description" aria-label="Description">' +
+      '<span class="amt"><input id="it' + n + 'a" class="i-amount num" type="number" step="0.01" min="0" placeholder="0.00" aria-label="Amount in dollars"></span>' +
+      '<button type="button" class="x" aria-label="Remove line">×</button>';
+    row.querySelector('.i-desc').value = desc || '';
+    row.querySelector('.i-amount').value = amount == null ? '' : amount;
+    row.querySelector('.x').addEventListener('click', function () { row.remove(); touch(); });
+    $('items').appendChild(row);
+  }
+
+  /* ---------- read the form ---------- */
+  function getData() {
+    var v = function (id) { return $(id).value.trim(); };
+    var currency = 'AUD';
+    var items = Array.prototype.map.call(document.querySelectorAll('.item'), function (r) {
+      var desc = r.querySelector('.i-desc').value.trim();
+      var a = parseFloat(r.querySelector('.i-amount').value);
+      var amount = isFinite(a) ? round2(a) : 0;
+      return { desc: desc, amount: amount, blank: !desc && !amount };
+    }).filter(function (i) { return !i.blank; });
+    var total = round2(items.reduce(function (s, i) { return s + i.amount; }, 0));
+    var noAbn = $('noAbn').checked;
+    return {
+      currency: currency,
+      fromName: v('fromName'), noAbn: noAbn, fromAbn: noAbn ? '' : abnText(v('fromAbn')),
+      fromAddr: v('fromAddr'), fromEmail: v('fromEmail'),
+      toText: v('toText'),
+      invNo: v('invNo'), date: $('issue').value,
+      items: items, total: total,
+      acctName: v('acctName'), bsb: v('bsb'), acctNo: v('acctNo')
+    };
+  }
+
+  /* ---------- live preview ---------- */
+  function render() {
+    var d = getData();
+    $('abnField').hidden = d.noAbn;
+    var h = '';
+    h += '<div class="sh-top"><h3>Invoice</h3></div>';
+    h += '<div class="sh-cols"><div><div class="sh-k">From</div><div><strong>' + esc(d.fromName || 'Your name') + '</strong></div>';
+    if (!d.noAbn && d.fromAbn) h += '<div>' + esc(d.fromAbn) + '</div>';
+    if (d.fromAddr) h += '<div class="pre">' + esc(d.fromAddr) + '</div>';
+    if (d.fromEmail) h += '<div>' + esc(d.fromEmail) + '</div>';
+    h += '</div><div><dl class="meta">';
+    if (d.invNo) h += '<dt>Number</dt><dd>' + esc(d.invNo) + '</dd>';
+    if (d.date) h += '<dt>Date</dt><dd>' + esc(fmtDate(d.date)) + '</dd>';
+    h += '</dl></div></div>';
+    var toLinesAll = d.toText.split('\n');
+    var toRest = toLinesAll.slice(1).join('\n').trim();
+    h += '<div class="sh-cols"><div><div class="sh-k">Billed to</div><div><strong>' + esc(toLinesAll[0].trim() || 'Client name') + '</strong></div>';
+    if (toRest) h += '<div class="pre">' + esc(toRest) + '</div>';
+    h += '</div></div>';
+    h += '<div class="tbl-wrap"><table><thead><tr><th>Description</th><th>Amount</th></tr></thead><tbody>';
+    if (!d.items.length) h += '<tr><td colspan="2" class="sh-empty">Add a line item to see it here.</td></tr>';
+    d.items.forEach(function (i) {
+      h += '<tr><td class="pre">' + esc(i.desc || '-') + '</td><td>' + esc(money(i.amount, d.currency)) + '</td></tr>';
+    });
+    h += '</tbody></table></div>';
+    h += '<div class="total"><span>Total</span><span>' + esc(money(d.total, d.currency)) + '</span></div>';
+    if (d.acctName || d.bsb || d.acctNo) {
+      h += '<div class="sh-pay"><div class="sh-k">Payment details</div><dl class="pay">';
+      if (d.acctName) h += '<dt>Account name</dt><dd>' + esc(d.acctName) + '</dd>';
+      if (d.bsb) h += '<dt>BSB</dt><dd>' + esc(d.bsb) + '</dd>';
+      if (d.acctNo) h += '<dt>Account number</dt><dd>' + esc(d.acctNo) + '</dd>';
+      h += '</dl></div>';
+    }
+    if (d.noAbn) {
+      h += '<div class="stmt-block"><div class="sh-k">Statement by supplier</div><div>' + esc(statementText(d)) +
+        '</div><div style="margin-top:10px">Signed,</div><div class="sig">' + esc(d.fromName) + '</div></div>';
+    }
+    $('sheet').innerHTML = h;
+    if (saving) persist();
+  }
+
+  /* ---------- PDF ---------- */
+  function buildPdf(d) {
+    var jsPDF = window.jspdf.jsPDF;
+    var doc = new jsPDF({ unit: 'mm', format: 'a4' });
+    var W = 210, H = 297, M = 18, R = W - M, y = M;
+    var INK = [23, 35, 31], MUTED = [102, 115, 111], ACCENT = [14, 106, 94], RULE = [217, 223, 220];
+    var DESC_W = 130;
+
+    function ensure(h) { if (y + h > H - M) { doc.addPage(); y = M; } }
+    function set(size, style, color) {
+      doc.setFont('helvetica', style || 'normal'); doc.setFontSize(size); doc.setTextColor(color[0], color[1], color[2]);
+    }
+    function label(text, x, yy) { set(7.5, 'normal', MUTED); doc.text(text.toUpperCase(), x, yy, { charSpace: 0.3 }); }
+
+    set(22, 'bold', ACCENT);
+    doc.text('INVOICE', M, y + 6);
+    y += 12;
+    doc.setDrawColor(ACCENT[0], ACCENT[1], ACCENT[2]); doc.setLineWidth(0.6); doc.line(M, y, R, y);
+    y += 9;
+
+    // from block (left) and meta (right)
+    var top = y, ly = y;
+    label('From', M, ly); ly += 5;
+    set(11, 'bold', INK); doc.text(d.fromName || 'Your name', M, ly); ly += 5;
+    var fromLines = [];
+    if (!d.noAbn && d.fromAbn) fromLines.push(d.fromAbn);
+    if (d.fromAddr) fromLines = fromLines.concat(doc.splitTextToSize(d.fromAddr, 90));
+    if (d.fromEmail) fromLines.push(d.fromEmail);
+    set(9.5, 'normal', INK);
+    fromLines.forEach(function (ln) { doc.text(ln, M, ly); ly += 4.5; });
+
+    var my = top + 5;
+    [['Number', d.invNo], ['Date', fmtDate(d.date)]].forEach(function (p) {
+      if (!p[1]) return;
+      set(9.5, 'normal', MUTED); doc.text(p[0], R - 52, my);
+      set(9.5, 'normal', INK); doc.text(p[1], R, my, { align: 'right' });
+      my += 5;
+    });
+    y = Math.max(ly, my) + 7;
+
+    // billed to (fixed)
+    label('Billed to', M, y); y += 5;
+    var toAll = d.toText.split('\n');
+    set(11, 'bold', INK); doc.text(toAll[0].trim() || 'Client name', M, y); y += 5;
+    set(9.5, 'normal', INK);
+    var toRestPdf = toAll.slice(1).join('\n').trim();
+    if (toRestPdf) doc.splitTextToSize(toRestPdf, 90).forEach(function (ln) { doc.text(ln, M, y); y += 4.5; });
+    y += 8;
+
+    // table header
+    function tableHead() {
+      label('Description', M, y);
+      set(7.5, 'normal', MUTED);
+      doc.text('AMOUNT', R, y, { align: 'right', charSpace: 0.3 });
+      y += 2.5;
+      doc.setDrawColor(INK[0], INK[1], INK[2]); doc.setLineWidth(0.3); doc.line(M, y, R, y);
+      y += 5.5;
+    }
+    tableHead();
+
+    if (!d.items.length) { set(9.5, 'normal', MUTED); doc.text('No line items', M, y); y += 8; }
+    d.items.forEach(function (it) {
+      var lines = doc.splitTextToSize(it.desc || '-', DESC_W);
+      var rowH = Math.max(lines.length * 4.6, 5) + 3.5;
+      if (y + rowH > H - M) { doc.addPage(); y = M; tableHead(); }
+      set(9.5, 'normal', INK);
+      lines.forEach(function (ln, k) { doc.text(ln, M, y + k * 4.6); });
+      doc.text(money(it.amount, d.currency), R, y, { align: 'right' });
+      var bottom = y + rowH - 4;
+      doc.setDrawColor(RULE[0], RULE[1], RULE[2]); doc.setLineWidth(0.2); doc.line(M, bottom, R, bottom);
+      y += rowH;
+    });
+
+    // total
+    ensure(20);
+    y += 3;
+    var LX = R - 70;
+    doc.setDrawColor(INK[0], INK[1], INK[2]); doc.setLineWidth(0.3); doc.line(LX, y, R, y);
+    y += 6;
+    set(11, 'bold', ACCENT);
+    doc.text('Total', LX, y); doc.text(money(d.total, d.currency), R, y, { align: 'right' });
+    y += 14;
+
+    // payment details
+    if (d.acctName || d.bsb || d.acctNo) {
+      ensure(30);
+      label('Payment details', M, y); y += 5.5;
+      [['Account name', d.acctName], ['BSB', d.bsb], ['Account number', d.acctNo]].forEach(function (p) {
+        if (!p[1]) return;
+        set(9.5, 'normal', MUTED); doc.text(p[0], M, y);
+        set(9.5, 'normal', INK); doc.text(p[1], M + 36, y);
+        y += 5;
+      });
+    }
+
+    // statement by supplier at the bottom, with a cursive signature drawn from the page font
+    if (d.noAbn) {
+      y += 6;
+      var sl = doc.splitTextToSize(statementText(d), R - M);
+      ensure(sl.length * 4.6 + 34);
+      label('Statement by supplier', M, y); y += 5;
+      set(9.5, 'normal', INK);
+      sl.forEach(function (ln) { doc.text(ln, M, y); y += 4.6; });
+      y += 4;
+      doc.text('Signed,', M, y); y += 2;
+      if (d.sig) {
+        var sw = Math.min(70, d.sig.w / d.sig.h * 12), sh = sw * d.sig.h / d.sig.w;
+        doc.addImage(d.sig.data, 'PNG', M, y, sw, sh); y += sh;
+      }
+    }
+
+    // page numbers when more than one page
+    var pages = doc.getNumberOfPages();
+    if (pages > 1) {
+      for (var p = 1; p <= pages; p++) {
+        doc.setPage(p); set(8, 'normal', MUTED);
+        doc.text('Page ' + p + ' of ' + pages, R, H - 9, { align: 'right' });
+      }
+    }
+    return doc;
+  }
+
+  /* ---------- download ---------- */
+  function setStatus(msg, isErr) {
+    var s = $('status'); s.textContent = msg; s.className = 'status' + (isErr ? ' err' : '');
+  }
+  // Draws the name in the cursive web font onto a canvas so the PDF can carry it as an image.
+  async function makeSig(name) {
+    if (!name) return null;
+    var font = '600 64px "Dancing Script", "Brush Script MT", "Segoe Script", cursive';
+    try { await document.fonts.load(font, name); } catch (e) {}
+    var c = document.createElement('canvas'), x = c.getContext('2d');
+    x.font = font;
+    var w = Math.ceil(x.measureText(name).width) + 24, h = 100;
+    c.width = w; c.height = h;
+    x.font = font; x.fillStyle = '#17231f'; x.textBaseline = 'alphabetic';
+    x.fillText(name, 12, 68);
+    return { data: c.toDataURL('image/png'), w: w, h: h };
+  }
+  async function download() {
+    if (!window.jspdf) { setStatus('The PDF library did not load. Check your connection and reload.', true); return; }
+    var d = getData();
+    if (!d.items.length) { setStatus('Add at least one line item first.', true); return; }
+    var doc;
+    try { d.sig = d.noAbn ? await makeSig(d.fromName) : null; } catch (e) { d.sig = null; }
+    try { doc = buildPdf(d); } catch (e) { setStatus('Could not build the PDF: ' + (e && e.message ? e.message : 'unknown error'), true); return; }
+    var blob = doc.output('blob');
+    var name = ((d.invNo || 'invoice') + '.pdf').replace(/[^\w.\- ]+/g, '_');
+    await dlReady;
+    if (dlCap) {
+      try {
+        await dlCap.save({ filename: name, data: blob });
+        setStatus('Saved ' + name);
+      } catch (e) {
+        if (e && e.code === 'declined') setStatus('Download cancelled.');
+        else if (e && e.code === 'rate_limited') setStatus('A save prompt is already open. Answer it, then try again.', true);
+        else setStatus('Downloads are not available in this view.', true);
+      }
+      return;
+    }
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+    setStatus('Downloaded ' + name);
+  }
+
+  /* ---------- input tidy-ups ---------- */
+  $('bsb').addEventListener('input', function (e) {
+    var digits = e.target.value.replace(/\D/g, '').slice(0, 6);
+    e.target.value = digits.length > 3 ? digits.slice(0, 3) + '-' + digits.slice(3) : digits;
+  });
+  $('acctNo').addEventListener('input', function (e) {
+    e.target.value = e.target.value.replace(/\D/g, '').slice(0, 10);
+  });
+
+  /* ---------- wiring ---------- */
+  function fill(map) { Object.keys(map).forEach(function (k) { $(k).value = map[k]; }); }
+  function loadExample() {
+    fill({
+      fromName: 'Johann Sebastian Bach', fromAbn: '12 345 678 901',
+      fromAddr: '14 Fugue Street\nContrapunctus\nGermany, 1685', fromEmail: 'bach@thomaskirche.org',
+      invNo: 'INV-0001', issue: isoDate(new Date()),
+      acctName: 'Johann Sebastian Bach', bsb: '952-138', acctNo: '1234567890'
+    });
+    $('noAbn').checked = false;
+    $('items').innerHTML = '';
+    addItem('Improvised atonal harpsichord accompaniment', '150');
+    $('noteText').textContent = 'Example details are loaded so you can see how it looks.';
+    $('example-note').hidden = false;
+    render();
+  }
+  function clearAll() {
+    ['fromName', 'fromAbn', 'fromAddr', 'fromEmail', 'acctName', 'bsb', 'acctNo'].forEach(function (k) { $(k).value = ''; });
+    fill({ invNo: 'INV-0001', issue: isoDate(new Date()) });
+    $('noAbn').checked = false;
+    $('items').innerHTML = '';
+    addItem('', '');
+    $('example-note').hidden = true;
+    touch();
+    $('fromName').focus();
+  }
+
+  $('form').addEventListener('input', touch);
+  $('form').addEventListener('change', touch);
+  $('form').addEventListener('submit', function (e) { e.preventDefault(); });
+  $('addItem').addEventListener('click', function () { addItem('', ''); touch(); var els = document.querySelectorAll('.i-desc'); els[els.length - 1].focus(); });
+  $('clear').addEventListener('click', clearAll);
+  Array.prototype.forEach.call(document.querySelectorAll('.dl'), function (b) { b.addEventListener('click', download); });
+
+  $('forget').addEventListener('click', function () {
+    saving = false;
+    try { localStorage.removeItem(STORE_KEY); } catch (e) {}
+    fill(BILLED_DEFAULT);
+    loadExample();
+    setStatus('Saved details removed from this browser.');
+  });
+
+  fill(BILLED_DEFAULT);
+  if (!restore()) loadExample();
+})();
+</script>
+
+</body></html>
